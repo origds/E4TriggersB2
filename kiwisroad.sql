@@ -87,8 +87,8 @@ CREATE OR REPLACE TYPE tipo_fecha_hora AS TABLE OF DATE;
 CREATE OR REPLACE TYPE COORDENADA_T AS OBJECT (
 	latitud NUMBER, --define un numero cuya parte entera sera maximo de 8
 	longitud NUMBER, --digitos y parte decimal de 8 digitos*/
-	altitud NUMBER,
-	MEMBER FUNCTION ref_Coordenada_Parada RETURN REF PARADA_T
+	altitud NUMBER
+	-- MEMBER FUNCTION ref_Coordenada_Parada RETURN REF PARADA_T
 );
 /
 
@@ -189,9 +189,10 @@ CREATE OR REPLACE TYPE RUTA_T AS OBJECT (
     fechaCrea DATE, -- Atributo absorbido de la asociacion crea  
 	refViasRuta REF_VIAS_T,
 	refHitosRuta REF_HITOS_T,
-	MEMBER FUNCTION calcularCalificacion RETURN INTEGER,
-	MEMBER FUNCTION calcularDistanciaARecorrer RETURN INTEGER,
-	MEMBER FUNCTION calcularTiempoAprox RETURN INTEGER
+	-- MEMBER FUNCTION calcularCalificacion RETURN INTEGER,
+	-- MEMBER FUNCTION calcularDistanciaARecorrer RETURN INTEGER,
+	-- MEMBER FUNCTION calcularTiempoAprox RETURN INTEGER,
+	MEMBER PROCEDURE listarActividadesDeRuta
 );
 /
 
@@ -234,9 +235,19 @@ CREATE OR REPLACE TYPE ORGANIZA_T AS OBJECT (
 ALTER TYPE COORDENADA_T ADD ATTRIBUTE refViasCoord REF_VIAS_T CASCADE;
 ALTER TYPE HITO_T ADD ATTRIBUTE refRutasHito REF_RUTAS_T CASCADE;
 ALTER TYPE VIA_T ADD ATTRIBUTE refRutasVia REF_RUTAS_T CASCADE;
+
+ALTER TYPE PARADA_T ADD ATTRIBUTE refHitosAct REF_ACTIVIDADES_T CASCADE;
+
 ALTER TYPE HITO_T ADD MEMBER FUNCTION obtenerActividades RETURN REF_ACTIVIDADES_T, --funcion que representa la asociacion califica tiene
 ALTER TYPE HITO_T ADD MEMBER FUNCTION formaParteDe RETURN REF_RUTAS_T -- funcion que permite la agregacion formadaPor 
 													 				  -- y devuelve las rutas a las que pertenece el hito
+
+
+
+
+
+-- CREATE OR REPLACE TRIGGER 
+
 
 
 --************ Creacion de Tablas utilizadas en Kiwi's Road ***********
@@ -245,7 +256,7 @@ ALTER TYPE HITO_T ADD MEMBER FUNCTION formaParteDe RETURN REF_RUTAS_T -- funcion
 CREATE TABLE COORDENADA_GEOGRAFICA OF COORDENADA_T (
 	latitud NOT NULL, --define un numero cuya parte entera sera maximo de 8*/
 	longitud NOT NULL, --digitos y parte decimal de 8 digitos*/
-	altitud NOT NULL,
+	altitud NOT NULL, 
 	PRIMARY KEY (latitud, longitud, altitud)
 ) NESTED TABLE refViasCoord STORE AS refViasCoordTable;
 
@@ -267,7 +278,7 @@ CREATE TABLE PARADA OF PARADA_T (
 	--Como la generalizacion es disjunta solo se crea tabla de la superclase
 	--y luego con triggers se verificara el tipo y dependiendo de ellos se hara un constructor
 	--para cada uno	
-);
+) NESTED TABLE refHitosAct STORE AS tieneActividad;
 
 CREATE TABLE ACTIVIDAD OF ACTIVIDAD_T (
 	nombreAct NOT NULL,
@@ -302,7 +313,8 @@ CREATE TABLE RUTA OF RUTA_T(
     tips NULL, 
     tiempoAprox NULL,
     fechaCrea NULL -- Atributo absorbido de la asociacion crea  
-)NESTED TABLE refViasRuta STORE AS refViasRutaTable, NESTED TABLE refHitosRuta STORE AS refHitosRutaTable;
+)NESTED TABLE refViasRuta STORE AS refViasRutaTable, 
+ NESTED TABLE refHitosRuta STORE AS formadaPor;
 
 
 CREATE TABLE ELIGE OF ELIGE_T (	
@@ -332,3 +344,30 @@ ALTER TABLE RUTA ADD CONSTRAINT "CALIFICACION_DOMINIO" CHECK (calificacion BETWE
 
 ALTER TYPE PARADA_T ADD MEMBER FUNCTION constructorHito RETURN REF HITO_T CASCADE;
 ALTER TYPE PARADA_T ADD MEMBER FUNCTION constructorServicio RETURN REF SERVICIO_T CASCADE;
+
+
+CREATE OR REPLACE TYPE BODY RUTA_T AS 
+	MEMBER PROCEDURE listarActividadesDeRuta IS 
+	act VARCHAR(50);
+	BEGIN
+		SELECT a.COLUMN_VALUE.nombreAct INTO act FROM THE (SELECT refHitosRuta FROM RUTA) h, --hitos y rutas de formadaPor
+											THE (SELECT refHitosAct FROM PARADA) a --hitos y actividades de tiene
+		WHERE 
+			a.COLUMN_VALUE.refHitoAct.idParada = h.COLUMN_VALUE.idParada
+		;
+		dbms_output.put_line('Activiad es: '|| act);
+	END;
+END;
+/
+
+-- CREATE OR REPLACE TRIGGER verificarTipoParada  BEFORE INSERT ON ACTIVIDAD 
+-- 	id INTEGER;
+-- 	nombre VARCHAR(50);
+-- 	BEGIN
+-- 		SELECT a.COLUMN_VALUE.nombreAct INTO nombre FROM THE (SELECT refHitoAct FROM ACTIVIDAD) a
+-- 														 THE (SELECT refHitosAct FROM PARADA) p
+-- 		WHERE 
+-- 			p.tipo == "hito" AND
+-- 			p.idParada == a.COLUMN_VALUE.idParada
+-- 		;
+-- 	END;
