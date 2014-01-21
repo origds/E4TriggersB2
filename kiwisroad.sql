@@ -189,9 +189,9 @@ CREATE OR REPLACE TYPE RUTA_T AS OBJECT (
     fechaCrea DATE, -- Atributo absorbido de la asociacion crea  
 	refViasRuta REF_VIAS_T,
 	refHitosRuta REF_HITOS_T,
-	MEMBER FUNCTION calcularCalificacion RETURN INTEGER,
-	MEMBER FUNCTION calcularDistanciaARecorrer RETURN INTEGER,
-	MEMBER FUNCTION calcularTiempoAprox RETURN INTEGER
+	--MEMBER FUNCTION calcularCalificacion RETURN INTEGER,
+	MEMBER FUNCTION calcularDistanciaARecorrer RETURN INTEGER
+	--MEMBER FUNCTION calcularTiempoAprox RETURN INTEGER
 );
 /
 
@@ -295,7 +295,6 @@ CREATE TABLE RUTA OF RUTA_T(
 	nroRuta NOT NULL,
 	PRIMARY KEY (nroRuta),
     etiquetas NOT NULL,
-    distanciaARecorrer NOT NULL,
     horaSalida NOT NULL,
     recomendaciones NOT NULL,
     calificacion NOT NULL,
@@ -332,3 +331,15 @@ ALTER TABLE RUTA ADD CONSTRAINT "CALIFICACION_DOMINIO" CHECK (calificacion BETWE
 
 ALTER TYPE PARADA_T ADD MEMBER FUNCTION constructorHito RETURN REF HITO_T CASCADE;
 ALTER TYPE PARADA_T ADD MEMBER FUNCTION constructorServicio RETURN REF SERVICIO_T CASCADE;
+
+CREATE OR REPLACE TYPE BODY RUTA_T AS MEMBER FUNCTION calcularDistanciaARecorrer
+RETURN  INTEGER  IS 
+	total INTEGER;
+	BEGIN 	
+		SELECT SUM(ss.COLUMN_VALUE.distanciaVia) INTO total FROM THE ( 
+			SELECT refViasRuta FROM RUTA) ss;
+		RETURN total;	
+	END;
+END;
+/
+	
