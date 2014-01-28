@@ -88,19 +88,8 @@ CREATE OR REPLACE TYPE COORDENADA_T AS OBJECT (
 	latitud NUMBER, --define un numero cuya parte entera sera maximo de 8
 	longitud NUMBER, --digitos y parte decimal de 8 digitos*/
 	altitud NUMBER
-	-- MEMBER FUNCTION ref_Coordenada_Parada RETURN REF PARADA_T
 );
 /
-
---Buscar en google la sintaxis correcta
--- ALTER TYPE ADD BODY STATEMENT 
--- 	CREATE FUNCTION ref_Coordenada_Parada() 
---    	RETURN REF PARADA_T is refParada;
---    BEGIN 
---       SELECT * FROM PARADA AS p
---       WHERE p.refCoordenada = self; 
---       RETURN(p.refCoordenada); 
---     END;
 
 --Tipo referencia a tabla de referencias de coordenadas
 CREATE OR REPLACE TYPE REF_COORDENADAS_T AS TABLE OF REF COORDENADA_T;
@@ -238,16 +227,10 @@ ALTER TYPE VIA_T ADD ATTRIBUTE refRutasVia REF_RUTAS_T CASCADE;
 
 ALTER TYPE PARADA_T ADD ATTRIBUTE refHitosAct REF_ACTIVIDADES_T CASCADE;
 
-ALTER TYPE HITO_T ADD MEMBER FUNCTION obtenerActividades RETURN REF_ACTIVIDADES_T, --funcion que representa la asociacion califica tiene
-ALTER TYPE HITO_T ADD MEMBER FUNCTION formaParteDe RETURN REF_RUTAS_T -- funcion que permite la agregacion formadaPor 
-													 				  -- y devuelve las rutas a las que pertenece el hito
-
-
-
-
-
--- CREATE OR REPLACE TRIGGER 
-
+--funcion que representa la asociacion califica tiene
+ALTER TYPE HITO_T ADD MEMBER FUNCTION obtenerActividades RETURN REF_ACTIVIDADES_T,
+-- funcion que permite la agregacion formadaPor y devuelve las rutas a las que pertenece el hito
+ALTER TYPE HITO_T ADD MEMBER FUNCTION formaParteDe RETURN REF_RUTAS_T
 
 
 --************ Creacion de Tablas utilizadas en Kiwi's Road ***********
@@ -267,7 +250,8 @@ CREATE TABLE VIA OF VIA_T (
 	nombreVia NOT NULL,
 	tipoVia NOT NULL, 
 	distanciaVia NOT NULL
-) NESTED TABLE refRutasVia STORE AS refRutasViaTable, NESTED TABLE refCoordenadasVia STORE AS refCoordenadasViaTable;
+) NESTED TABLE refRutasVia STORE AS refRutasViaTable, 
+  NESTED TABLE refCoordenadasVia STORE AS refCoordenadasViaTable;
 
 
 CREATE TABLE PARADA OF PARADA_T (
@@ -344,39 +328,111 @@ ALTER TABLE RUTA ADD CONSTRAINT "CALIFICACION_DOMINIO" CHECK (calificacion BETWE
 ALTER TYPE PARADA_T ADD MEMBER FUNCTION constructorHito RETURN REF HITO_T CASCADE;
 ALTER TYPE PARADA_T ADD MEMBER FUNCTION constructorServicio RETURN REF SERVICIO_T CASCADE;
 
-CREATE OR REPLACE TYPE BODY RUTA_T AS MEMBER FUNCTION calcularDistanciaARecorrer
-RETURN  INTEGER  IS 
-	total INTEGER;
-	BEGIN 	
-		SELECT SUM(ss.COLUMN_VALUE.distanciaVia) INTO total FROM THE ( 
-			SELECT refViasRuta FROM RUTA) ss;
-		RETURN total;	
-	END;
-END;
-/
+----------------------------------------------------
+-- Definicion e implementacion de Metodos y Triggers
+----------------------------------------------------
+
+-- 1) Funcion que calcula la distacia a recorrer en una ruta basandose en la suma de las distancias
+-- de todas las vias que conforman la ruta
+-- CREATE OR REPLACE TYPE BODY RUTA_T AS MEMBER FUNCTION calcularDistanciaARecorrer
+-- RETURN  INTEGER  IS 
+-- 	total INTEGER;
+-- 	BEGIN 	
+-- 		SELECT SUM(ss.COLUMN_VALUE.distanciaVia) INTO total FROM THE ( 
+-- 			SELECT refViasRuta FROM RUTA) ss;
+-- 		RETURN total;	
+-- 	END;
+-- END;
+-- /
 	
-CREATE OR REPLACE TYPE BODY RUTA_T AS 
-	MEMBER PROCEDURE listarActividadesDeRuta IS 
-	act VARCHAR(50);
-	BEGIN
-		SELECT a.COLUMN_VALUE.nombreAct INTO act FROM THE (SELECT refHitosRuta FROM RUTA) h, --hitos y rutas de formadaPor
-											THE (SELECT refHitosAct FROM PARADA) a --hitos y actividades de tiene
-		WHERE 
-			a.COLUMN_VALUE.refHitoAct.idParada = h.COLUMN_VALUE.idParada
-		;
-		dbms_output.put_line('Activiad es: '|| act);
-	END;
+-- 2) Procedimiento que lista las actividades de una ruta
+CREATE OR REPLACE TYPE BODY RUTA_T AS MEMBER PROCEDURE listarActividadesDeRuta IS 
+  act VARCHAR(50);
+  BEGIN
+    SELECT a.COLUMN_VALUE.nombreAct INTO act FROM THE (SELECT refHitosRuta FROM RUTA) h, --hitos y rutas de formadaPor
+                      THE (SELECT refHitosAct FROM PARADA) a --hitos y actividades de tiene
+    WHERE 
+      a.COLUMN_VALUE.refHitoAct.idParada = h.COLUMN_VALUE.idParada
+    ;
+    dbms_output.put_line('Activiad es: '|| act);
+  END;
 END;
 /
 
+-- 3) Funcion que dada una coordenada devuelve la parada que se encuentra en esta coordenada
+ALTER TYPE COORDENADA_T ADD MEMBER FUNCTION ref_Coordenada_Parada RETURN PARADA_T CASCADE;
+
+CREATE OR REPLACE TYPE BODY COORDENADA_T AS MEMBER FUNCTION ref_Coordenada_Parada RETURN PARADA_T IS 
+  objetoParada PARADA_T;
+  BEGIN 
+    SELECT value(p) INTO objetoParada FROM PARADA p
+    WHERE DEREF(p.refCoordenada).latitud = self.latitud 
+      AND DEREF(p.refCoordenada).longitud = self.longitud
+      AND DEREF(p.refCoordenada).altitud = self.altitud; 
+    RETURN objetoParada; 
+  END;
+END;
+/
+
+-- Trigger que mantiene la consistencia entre la nested table de vias en la tabla RUTA 
+-- y la nested table de rutas en la tabla VIA
+
+CREATE OR REPLACE TRIGGER consistenciaRutaVia
+  BEFORE INSERT OR UPDATE ON RUTA
+  FOR EACH ROW
+  DECLARE
+    via_agregar INTEGER;
+    CURSOR vias_rutas IS
+      SELECT vias.COLUMN_VALUE.idVia AS idVia FROM THE (SELECT r.refViasRuta FROM RUTA r WHERE r.nroRuta = :NEW.nroRuta) vias;
+  BEGIN
+    FOR i IN vias_rutas
+    LOOP
+      SELECT idVia INTO via_agregar FROM VIA WHERE idVia = i.idVia;
+      IF via_agregar IS NULL THEN 
+        RAISE_APPLICATION_ERROR(-20336, 'La via especificada no existe debe agregarla a la tabla VIA');
+      END IF; 
+        INSERT INTO TABLE (SELECT refRutasVia FROM VIA WHERE idVia = i.idVia)
+        SELECT ref(r) FROM RUTA r WHERE r.nroRuta = :NEW.nroRuta;
+      COMMIT;
+    END LOOP;
+  END;
+/  
+
+--Trigger que mantiene la consistencia entre la nested table de rutas en la tabla VIA
+-- y la nested table de vias en la tabla RUTA
+
+CREATE OR REPLACE TRIGGER consistenciaViaRuta
+  BEFORE INSERT OR UPDATE ON VIA
+  FOR EACH ROW
+  DECLARE
+    ruta_agregar INTEGER;
+    CURSOR rutas_vias IS 
+      SELECT rutas.COLUMN_VALUE.nroRuta AS nroRuta FROM THE (SELECT v.refRutasVia FROM VIA v WHERE v.idVia = :NEW.idVia) rutas;
+  BEGIN
+    IF UPDATING('refRutasVia') THEN
+      FOR i IN rutas_vias
+      LOOP
+        SELECT nroRuta INTO ruta_agregar FROM RUTA WHERE nroRuta = i.nroRuta;
+        IF ruta_agregar IS NULL THEN
+          RAISE_APPLICATION_ERROR(-20813, 'La ruta formada por esta via debe existir');
+        END IF;
+      END LOOP;
+    ELSIF INSERTING THEN
+      IF :NEW.refRutasVia IS NOT NULL THEN
+        RAISE_APPLICATION_ERROR(-20215, 'Para asociar una via a una ruta debe agregar la via sin ref y luego agregar la ruta');
+      END IF;
+    END IF;
+  END;
+/
+
 -- CREATE OR REPLACE TRIGGER verificarTipoParada  BEFORE INSERT ON ACTIVIDAD 
--- 	id INTEGER;
--- 	nombre VARCHAR(50);
--- 	BEGIN
--- 		SELECT a.COLUMN_VALUE.nombreAct INTO nombre FROM THE (SELECT refHitoAct FROM ACTIVIDAD) a
--- 														 THE (SELECT refHitosAct FROM PARADA) p
--- 		WHERE 
--- 			p.tipo == "hito" AND
--- 			p.idParada == a.COLUMN_VALUE.idParada
--- 		;
--- 	END;
+--  id INTEGER;
+--  nombre VARCHAR(50);
+--  BEGIN
+--    SELECT a.COLUMN_VALUE.nombreAct INTO nombre FROM THE (SELECT refHitoAct FROM ACTIVIDAD) a
+--                             THE (SELECT refHitosAct FROM PARADA) p
+--    WHERE 
+--      p.tipo == "hito" AND
+--      p.idParada == a.COLUMN_VALUE.idParada
+--    ;
+--  END;
