@@ -390,10 +390,11 @@ CREATE OR REPLACE TRIGGER consistenciaRutaVia
       SELECT idVia INTO via_agregar FROM VIA WHERE idVia = i.idVia;
       IF via_agregar IS NULL THEN 
         RAISE_APPLICATION_ERROR(-20336, 'La via especificada no existe debe agregarla a la tabla VIA');
-      END IF; 
-        INSERT INTO TABLE (SELECT refRutasVia FROM VIA WHERE idVia = i.idVia)
-        SELECT ref(r) FROM RUTA r WHERE r.nroRuta = :NEW.nroRuta;
-      COMMIT;
+      ELSE 
+    	  INSERT INTO TABLE (SELECT v.refRutasVia FROM VIA v WHERE v.idVia = via_agregar)
+          SELECT ref(r) FROM RUTA r WHERE r.nroRuta = :NEW.nroRuta; 
+      	COMMIT;
+      END IF;
     END LOOP;
   END;
 /  
@@ -418,8 +419,9 @@ CREATE OR REPLACE TRIGGER consistenciaViaRuta
         END IF;
       END LOOP;
     ELSIF INSERTING THEN
-      IF :NEW.refRutasVia IS NOT NULL THEN
-        RAISE_APPLICATION_ERROR(-20215, 'Para asociar una via a una ruta debe agregar la via sin ref y luego agregar la ruta');
+		  OPEN rutas_vias;
+      IF rutas_vias%FOUND THEN
+        RAISE_APPLICATION_ERROR(-20215, 'Para asociar una via a una ruta debe agregar la via sin referencias y luego agregar la ruta');
       END IF;
     END IF;
   END;
