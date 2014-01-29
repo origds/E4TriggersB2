@@ -181,7 +181,7 @@ CREATE OR REPLACE TYPE RUTA_T AS OBJECT (
 	--MEMBER FUNCTION calcularCalificacion RETURN INTEGER,
 	MEMBER FUNCTION calcularDistanciaARecorrer(id INTEGER) RETURN INTEGER,
 	--MEMBER FUNCTION calcularTiempoAprox RETURN INTEGER
-	MEMBER PROCEDURE listarActividadesDeRuta
+	MEMBER PROCEDURE listarActividadesDeRuta(id INTEGER)
 );
 /
 
@@ -340,7 +340,7 @@ CREATE OR REPLACE TYPE BODY RUTA_T AS
 			SELECT tr.COLUMN_VALUE.distanciaVia AS distanciaVia FROM THE (SELECT r.refViasRuta FROM RUTA r WHERE r.nroRuta= id) tr;
 	BEGIN 	
 		total := 0;
-		FOR i in distancia_vias
+		FOR i IN distancia_vias
 		LOOP
 			total := total + i.distanciaVia;	
 		END LOOP;
@@ -348,13 +348,16 @@ CREATE OR REPLACE TYPE BODY RUTA_T AS
 	END;
 	
 	--2) procedimiento que lista las actividades de una ruta
-	MEMBER PROCEDURE listarActividadesDeRuta IS act VARCHAR(50);
+	MEMBER PROCEDURE listarActividadesDeRuta(id INTEGER) IS act VARCHAR(50);
+		CURSOR act_hitos_ruta IS
+			SELECT a.COLUMN_VALUE.nombreAct AS nombreAct FROM THE (SELECT r.refHitosRuta FROM RUTA r WHERE r.nroRuta= id) tr,
+				THE (SELECT p.refHitosAct FROM PARADA p) a, PARADA p
+			WHERE (p.idParada = tr.COLUMN_VALUE.idParada);
 	BEGIN
-		SELECT a.COLUMN_VALUE.nombreAct INTO act FROM THE (SELECT refHitosRuta FROM RUTA) h, --hitos y rutas de formadaPor
-			THE (SELECT refHitosAct FROM PARADA) a --hitos y actividades de tiene
-		WHERE 
-			a.COLUMN_VALUE.refHitoAct.idParada = h.COLUMN_VALUE.idParada;
-		dbms_output.put_line('Activiad es: '|| act);
+		FOR i IN act_hitos_ruta
+		LOOP
+			dbms_output.put_line('Activiad es: '|| i.nombreAct);
+		END LOOP;
 	END;
 END;
 /
@@ -420,7 +423,7 @@ CREATE OR REPLACE TRIGGER consistenciaViaRuta
         END IF;
       END LOOP;
     ELSIF INSERTING THEN
-		  OPEN rutas_vias;
+      OPEN rutas_vias;
       IF rutas_vias%FOUND THEN
         RAISE_APPLICATION_ERROR(-20215, 'Para asociar una via a una ruta debe agregar la via sin referencias y luego agregar la ruta');
       END IF;
@@ -428,11 +431,21 @@ CREATE OR REPLACE TRIGGER consistenciaViaRuta
   END;
 /
 
+-- Trigger que verifica que la actividad se agregue a un hito y no a un servicio en parada
 
--- CREATE OR REPLACE TRIGGER verificarHItoViaRuta BEFORE INSERT OR UPDATE ON 
--- 	ACTIVIDAD FOR EACH ROW DECLARE 
--- 	tablaVias REF_VIAS_T;
--- 	tablaRutas REF_RUTAS_T; 
--- 	BEGIN 
--- 		SELECT trRutasVias INTO tablaVias FROM THE (SELECT refViasRuta FROM RUTA) trRutasVias, 
--- 				THE (SELECT value(trViasRutas) INTO tablaRuta FROM THE (SELECT refRutasVia FROM VIA) trViasRutas;
+CREATE OR REPLACE TRIGGER verificarTipoParada BEFORE INSERT OR UPDATE ON ACTIVIDAD
+FOR EACH ROW
+	DECLARE
+		tipoPa VARCHAR(20);
+	BEGIN
+		SELECT p1.tipo INTO tipoPa 
+		FROM PARADA p1
+		WHERE 
+			DEREF(:NEW.refHitoAct).idParada = p1.idParada
+		;
+
+		IF tipoPa <> 'hito' THEN
+			RAISE_APPLICATION_ERROR(-42000, 'No puede insertarse');
+		END IF;
+	END;
+/

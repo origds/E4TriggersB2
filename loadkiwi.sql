@@ -73,8 +73,8 @@ INSERT INTO RUTA (nroRuta, etiquetas, horaSalida, recomendaciones, calificacion,
   '195', '5', (SELECT REF_VIAS_T(ref(v)) FROM VIA v WHERE v.idVia = 1)
 );
 
-INSERT INTO RUTA (nroRuta, etiquetas, horaSalida, recomendaciones, calificacion, refViasRuta) VALUES (
-	'2', tipo_etiqueta('recreativa'), to_date('08:30:00', 'hh24:mi:ss'), '70', '4', REF_VIAS_T()
+INSERT INTO RUTA (nroRuta, etiquetas, horaSalida, recomendaciones, calificacion, refViasRuta, refHitosRuta) VALUES (
+	'2', tipo_etiqueta('recreativa'), to_date('08:30:00', 'hh24:mi:ss'), '70', '4', REF_VIAS_T(), REF_HITOS_T()
 );
 
 INSERT INTO TABLE (SELECT r.refViasRuta FROM RUTA r WHERE r.nroRuta = 2)
