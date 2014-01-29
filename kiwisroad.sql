@@ -21,7 +21,7 @@
 -- 		VIA
 -- 		EVENTO
 -- 		USUARIO 
--- 			GUIA
+-- 			GUIAc
 	
 -- 	Asociaciones
 -- 		tiene (Hito - Act)
@@ -344,30 +344,36 @@ ALTER TABLE RUTA ADD CONSTRAINT "CALIFICACION_DOMINIO" CHECK (calificacion BETWE
 ALTER TYPE PARADA_T ADD MEMBER FUNCTION constructorHito RETURN REF HITO_T CASCADE;
 ALTER TYPE PARADA_T ADD MEMBER FUNCTION constructorServicio RETURN REF SERVICIO_T CASCADE;
 
-CREATE OR REPLACE TYPE BODY RUTA_T AS MEMBER FUNCTION calcularDistanciaARecorrer
-RETURN  INTEGER  IS 
-	total INTEGER;
+CREATE OR REPLACE TYPE BODY RUTA_T AS 
+
+	MEMBER FUNCTION calcularDistanciaARecorrer RETURN  INTEGER  IS total INTEGER;
 	BEGIN 	
-		SELECT SUM(ss.COLUMN_VALUE.distanciaVia) INTO total FROM THE ( 
-			SELECT refViasRuta FROM RUTA) ss;
+		SELECT SUM(tr.COLUMN_VALUE.distanciaVia) INTO total FROM THE ( 
+			SELECT refViasRuta FROM RUTA) tr;
+		dbms_output.put_line('La distancia de esta ruta es: '|| total);
 		RETURN total;	
 	END;
-END;
-/
 	
-CREATE OR REPLACE TYPE BODY RUTA_T AS 
-	MEMBER PROCEDURE listarActividadesDeRuta IS 
-	act VARCHAR(50);
+	MEMBER PROCEDURE listarActividadesDeRuta IS act VARCHAR(50);
 	BEGIN
 		SELECT a.COLUMN_VALUE.nombreAct INTO act FROM THE (SELECT refHitosRuta FROM RUTA) h, --hitos y rutas de formadaPor
 											THE (SELECT refHitosAct FROM PARADA) a --hitos y actividades de tiene
 		WHERE 
-			a.COLUMN_VALUE.refHitoAct.idParada = h.COLUMN_VALUE.idParada
-		;
+			a.COLUMN_VALUE.refHitoAct.idParada = h.COLUMN_VALUE.idParada;
 		dbms_output.put_line('Activiad es: '|| act);
 	END;
 END;
 /
+
+CREATE OR REPLACE TRIGGER verificarHItoViaRuta BEFORE INSERT OR UPDATE ON 
+	ACTIVIDAD FOR EACH ROW DECLARE 
+	tablaVias REF_VIAS_T;
+	tablaRutas REF_RUTAS_T; 
+	BEGIN 
+		SELECT trRutasVias INTO tablaVias FROM THE (SELECT refViasRuta FROM RUTA) trRutasVias, 
+				THE (SELECT value(trViasRutas) INTO tablaRuta FROM THE (SELECT refRutasVia FROM VIA) trViasRutas;
+			
+			
 
 -- CREATE OR REPLACE TRIGGER verificarTipoParada  BEFORE INSERT ON ACTIVIDAD 
 -- 	id INTEGER;

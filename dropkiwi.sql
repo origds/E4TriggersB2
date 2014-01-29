@@ -43,5 +43,5 @@ DROP TABLE GUIA;
 DROP TABLE USUARIO;
 DROP TABLE RUTA;
 
- DROP FUNCTION calcularDistanciaARecorrer;
+DROP FUNCTION calcularDistanciaARecorrer;
 
