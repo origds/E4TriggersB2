@@ -179,7 +179,7 @@ CREATE OR REPLACE TYPE RUTA_T AS OBJECT (
 	refViasRuta REF_VIAS_T,
 	refHitosRuta REF_HITOS_T,
 	--MEMBER FUNCTION calcularCalificacion RETURN INTEGER,
-	MEMBER FUNCTION calcularDistanciaARecorrer RETURN INTEGER,
+	MEMBER FUNCTION calcularDistanciaARecorrer(id INTEGER) RETURN INTEGER,
 	--MEMBER FUNCTION calcularTiempoAprox RETURN INTEGER
 	MEMBER PROCEDURE listarActividadesDeRuta
 );
@@ -335,12 +335,16 @@ ALTER TYPE PARADA_T ADD MEMBER FUNCTION constructorServicio RETURN REF SERVICIO_
 CREATE OR REPLACE TYPE BODY RUTA_T AS 
 
 	--1) funcion que calcula la distancia total de una ruta
-	MEMBER FUNCTION calcularDistanciaARecorrer RETURN  INTEGER  IS total INTEGER;
+	MEMBER FUNCTION calcularDistanciaARecorrer(id INTEGER) RETURN  INTEGER  IS total INTEGER;
+		CURSOR distancia_vias IS
+			SELECT tr.COLUMN_VALUE.distanciaVia AS distanciaVia FROM THE (SELECT r.refViasRuta FROM RUTA r WHERE r.nroRuta= id) tr;
 	BEGIN 	
-		SELECT SUM(tr.COLUMN_VALUE.distanciaVia) INTO total FROM THE ( 
-			SELECT refViasRuta FROM RUTA) tr;
-		dbms_output.put_line('La distancia de esta ruta es: '|| total);
-		RETURN total;	
+		total := 0;
+		FOR i in distancia_vias
+		LOOP
+			total := total + i.distanciaVia;	
+		END LOOP;
+		RETURN total;
 	END;
 	
 	--2) procedimiento que lista las actividades de una ruta
